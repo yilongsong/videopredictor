@@ -869,6 +869,8 @@ class Trainer(object):
 
                 for _ in range(self.gradient_accumulate_every):
                     x, x_cond, goal = next(self.dl)
+                    print(x.shape)
+                    print(x_cond.shape)
                     x, x_cond = x.to(device), x_cond.to(device)
 
                     goal_embed = self.encode_batch_text(goal)

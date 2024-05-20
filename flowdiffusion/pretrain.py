@@ -2,6 +2,7 @@ from goal_diffusion import GoalGaussianDiffusion, Trainer
 from unet import UnetMW as Unet
 from transformers import CLIPTextModel, CLIPTokenizer
 from datasets import SequentialDatasetv2
+from datasets import Dataset_hdf5
 from torch.utils.data import Subset
 import argparse
 
@@ -14,11 +15,10 @@ def main(args):
     if args.mode == 'inference':
         train_set = valid_set = [None] # dummy
     else:
-        train_set = SequentialDatasetv2(
-            sample_per_seq=sample_per_seq, 
-            path="/home/yilong/Documents/videopredictor/datasets/metaworld", 
-            target_size=target_size,
-            randomcrop=True
+        train_set = Dataset_hdf5(
+            path="/home/yilong/Documents/videopredictor/datasets/",
+            frame_skip=3,
+            random_crop=True
         )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
@@ -58,7 +58,7 @@ def main(args):
         valid_batch_size =32,
         gradient_accumulate_every = 1,
         num_samples=valid_n, 
-        results_folder ='../results/mw',
+        results_folder ='../results/pretrain',
         fp16 =True,
         amp=True,
     )
@@ -78,7 +78,6 @@ def main(args):
         guidance_weight = args.guidance_weight
         image = Image.open(args.inference_path)
         batch_size = 1
-        ### 231130 fixed center crop issue 
         transform = transforms.Compose([
             transforms.Resize((240, 320)),
             transforms.CenterCrop(target_size),

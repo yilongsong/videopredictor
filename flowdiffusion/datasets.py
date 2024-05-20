@@ -13,6 +13,8 @@ from torchvideotransforms import video_transforms, volume_transforms
 from einops import rearrange
 # from vidaug import augmentors as va
 
+import h5py
+
 random.seed(0)
 
 ### Sequential Datasets: given first frame, predict all the future frames
@@ -425,6 +427,58 @@ class MySeqDatasetReal(SequentialDataset):
             T.ToTensor()
         ])
         print("Done")
+
+
+class Dataset_hdf5(Dataset):
+    def __init__(self, path='../datasets/', frame_skip=0, random_crop=False):
+        print("Preparing hdf5 dataset ...")
+        self.frame_skip = frame_skip
+
+        sequence_dirs = glob(f"{path}/**/*.hdf5", recursive=True)
+        self.tasks = []
+        self.obs = []
+        self.next_obs = []
+
+
+        for seq_dir in sequence_dirs:
+            print(seq_dir)
+            task = seq_dir.split("/")[-2].replace('_', ' ')
+            with h5py.File(seq_dir, 'r') as f:
+                data = f['data']
+                for demo in data:
+                    obs = f['data'][demo]['obs']['sideview_image'][::frame_skip+1]
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::frame_skip+1]
+                    for i in range(len(obs)):
+                        self.obs.append(obs[i])
+                        self.next_obs.append(next_obs[i])
+                        self.tasks.append(task)
+        
+        self.transform = video_transforms.Compose([
+                volume_transforms.ClipToTensor()
+        ])
+        print('Done')
+
+    def get_samples(self, idx):
+        return [self.obs[idx], self.next_obs[idx]]
+
+    def __len__(self):
+        return len(self.obs)
+
+    def __getitem__(self, idx):
+        samples = self.get_samples(idx)
+        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")).float()
+        # x = rearrange(images[:, 1:], "c f h w -> (f c) h w")
+        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
+        task = self.tasks[idx]
+        return x, x_cond, task
+
+class MarkovianDatasethdf5(Dataset_hdf5):
+    def __getitem__(self, idx):
+        pass
+
+    def get_first_frame(self, idx):
+        pass
+
 
 
 if __name__ == "__main__":
