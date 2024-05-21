@@ -16,7 +16,8 @@ def main(args):
     else:
         train_set = SequentialDatasetv2(
             sample_per_seq=sample_per_seq, 
-            path="/home/yilong/Documents/videopredictor/datasets/metaworld", 
+            #path="/home/yilong/Documents/videopredictor/datasets/metaworld", 
+            path="/users/ysong135/Desktop/videopredictor/datasets",
             target_size=target_size,
             randomcrop=True
         )
@@ -51,7 +52,7 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps =60000,
-        save_and_sample_every =2500,
+        save_and_sample_every =1,
         ema_update_every = 10,
         ema_decay = 0.999,
         train_batch_size =16,

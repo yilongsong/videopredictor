@@ -6,22 +6,28 @@ from datasets import Dataset_hdf5
 from torch.utils.data import Subset
 import argparse
 
-
 def main(args):
-    valid_n = 1
-    sample_per_seq = 8
+    valid_n = 1000
+    sample_per_seq = 2
     target_size = (128, 128)
 
     if args.mode == 'inference':
-        train_set = valid_set = [None] # dummy
-    else:
-        train_set = Dataset_hdf5(
-            path="/home/yilong/Documents/videopredictor/datasets/",
+        train_set = valid_set = Dataset_hdf5(
+            path="/users/ysong135/scratch/datasets/",
             frame_skip=3,
             random_crop=True
         )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
+    else:
+        train_set = Dataset_hdf5(
+            path="/users/ysong135/scratch/datasets/",
+            frame_skip=3,
+            random_crop=True
+        )
+        valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
+        valid_set = Subset(train_set, valid_inds)
+        train_set.obs, train_set.next_obs = train_set.obs[:-valid_n], train_set.next_obs[:-valid_n]
 
     unet = Unet()
 
@@ -54,8 +60,8 @@ def main(args):
         save_and_sample_every =2500,
         ema_update_every = 10,
         ema_decay = 0.999,
-        train_batch_size =16,
-        valid_batch_size =32,
+        train_batch_size =4,
+        valid_batch_size =8,
         gradient_accumulate_every = 1,
         num_samples=valid_n, 
         results_folder ='../results/pretrain',
@@ -69,28 +75,29 @@ def main(args):
     if args.mode == 'train':
         trainer.train()
     else:
-        from PIL import Image
+        import numpy as np
         from torchvision import transforms
         import imageio
         import torch
         from os.path import splitext
         text = args.text
         guidance_weight = args.guidance_weight
-        image = Image.open(args.inference_path)
+        obs_next_text = valid_set[np.random.randint(len(valid_set))]
+        obs = obs_next_text[0]
+        next_obs = obs_next_text[1]
+        instruction = obs_next_text[2]
         batch_size = 1
-        transform = transforms.Compose([
-            transforms.Resize((240, 320)),
-            transforms.CenterCrop(target_size),
-            transforms.ToTensor(),
-        ])
-        image = transform(image)
-        output = trainer.sample(image.unsqueeze(0), [text], batch_size, guidance_weight).cpu()
+        output = trainer.sample(obs.unsqueeze(0), [text], batch_size, guidance_weight).cpu()
         output = output[0].reshape(-1, 3, *target_size)
-        output = torch.cat([image.unsqueeze(0), output], dim=0)
+        output = torch.cat([obs.unsqueeze(0), output], dim=0)
+        output_gt = torch.cat([obs.unsqueeze(0), next_obs.unsqueeze(0)], dim=0)
         root, ext = splitext(args.inference_path)
-        output_gif = root + '_out.gif'
+        output_gif = '../examples/' + text.replace(' ', '_') + '_out.gif'
+        output_gt_gif = '../examples/' + text.replace(' ', '_') + '_out_gt.gif'
         output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
+        output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
         imageio.mimsave(output_gif, output, duration=200, loop=1000)
+        imageio.mimsave(output_gt_gif, output_gt, duration=200, loop=1000)
         print(f'Generated {output_gif}')
 
 if __name__ == "__main__":

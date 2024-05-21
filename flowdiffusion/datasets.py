@@ -441,7 +441,7 @@ class Dataset_hdf5(Dataset):
 
 
         for seq_dir in sequence_dirs:
-            print(seq_dir)
+            print(f'Loading from {seq_dir}')
             task = seq_dir.split("/")[-2].replace('_', ' ')
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
@@ -466,9 +466,9 @@ class Dataset_hdf5(Dataset):
 
     def __getitem__(self, idx):
         samples = self.get_samples(idx)
-        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")).float()
+        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")/255.0).float()
         # x = rearrange(images[:, 1:], "c f h w -> (f c) h w")
-        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
+        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')/255.0).float()
         task = self.tasks[idx]
         return x, x_cond, task
 

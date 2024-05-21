@@ -869,8 +869,6 @@ class Trainer(object):
 
                 for _ in range(self.gradient_accumulate_every):
                     x, x_cond, goal = next(self.dl)
-                    print(x.shape)
-                    print(x_cond.shape)
                     x, x_cond = x.to(device), x_cond.to(device)
 
                     goal_embed = self.encode_batch_text(goal)
@@ -923,18 +921,26 @@ class Trainer(object):
                         print_gpu_utilization()
                         
                         gt_xs = torch.cat(xs, dim = 0) # [batch_size, 3*n, 120, 160]
+                        # print(gt_xs.shape)
+                        # image = np.squeeze(gt_xs)
+                        # plt.imshow(np.transpose(image, (1,2,0)))
+                        # plt.axis('off')
+                        # plt.show()
                         # make it [batchsize*n, 3, 120, 160]
                         n_rows = gt_xs.shape[1] // 3
                         gt_xs = rearrange(gt_xs, 'b (n c) h w -> b n c h w', n=n_rows)
                         ### save images
+                        # print(gt_xs.shape)
                         x_conds = torch.cat(x_conds, dim = 0).detach().cpu()
                         # x_conds = rearrange(x_conds, 'b (n c) h w -> b n c h w', n=1)
                         all_xs = torch.cat(all_xs_list, dim = 0).detach().cpu()
                         all_xs = rearrange(all_xs, 'b (n c) h w -> b n c h w', n=n_rows)
+                        # print(all_xs.shape)
 
                         gt_first = gt_xs[:, :1]
                         gt_last = gt_xs[:, -1:]
-
+                        # print(gt_first.shape)
+                        # print(gt_last.shape)
 
 
                         if self.step == self.save_and_sample_every:
