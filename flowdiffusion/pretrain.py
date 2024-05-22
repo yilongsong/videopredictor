@@ -7,7 +7,7 @@ from torch.utils.data import Subset
 import argparse
 
 def main(args):
-    valid_n = 1000
+    valid_n = 3
     sample_per_seq = 2
     target_size = (128, 128)
 
