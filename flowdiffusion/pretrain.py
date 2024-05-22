@@ -27,7 +27,7 @@ def main(args):
         )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
-        train_set.obs, train_set.next_obs = train_set.obs[:-valid_n], train_set.next_obs[:-valid_n]
+        #train_set.obs, train_set.next_obs = train_set.obs[:-valid_n], train_set.next_obs[:-valid_n]
 
     unet = Unet()
 
@@ -61,7 +61,7 @@ def main(args):
         ema_update_every = 10,
         ema_decay = 0.999,
         train_batch_size =4,
-        valid_batch_size =8,
+        valid_batch_size =4,
         gradient_accumulate_every = 1,
         num_samples=valid_n, 
         results_folder ='../results/pretrain',
