@@ -14,6 +14,7 @@ from einops import rearrange
 # from vidaug import augmentors as va
 
 import h5py
+from transformers import CLIPProcessor, CLIPModel
 
 random.seed(0)
 
@@ -429,9 +430,48 @@ class MySeqDatasetReal(SequentialDataset):
         print("Done")
 
 
-class Dataset_hdf5(Dataset):
-    def __init__(self, path='../datasets/', frame_skip=0, random_crop=False):
-        print("Preparing hdf5 dataset ...")
+def visualize_semantic_map(image_tensor, semantic_map_np):
+    from matplotlib import pyplot as plt
+    plt.figure(figsize=(6, 6))
+    plt.subplot(1, 2, 1)
+    plt.imshow(image_tensor.permute(1, 2, 0))
+    plt.title('Original Image')
+    plt.axis('off')
+
+    # Visualize the semantic map
+    plt.subplot(1, 2, 2)
+    plt.imshow(semantic_map_np, cmap='viridis')
+    plt.title('Semantic Map')
+    plt.axis('off')
+
+    plt.show()
+
+def get_image_with_semantic_map(clip_model, clip_processor, image_array):
+    inputs = clip_processor(images=image_array, return_tensors="pt", padding=True)
+    with torch.no_grad():
+        image_features = clip_model.get_image_features(**inputs)
+
+    print(image_features.shape)
+    # Resize semantic map to (128, 128, 1)
+    semantic_map = torch.nn.functional.interpolate(image_features, size=(128, 128), mode="bicubic", align_corners=False)
+
+    # Convert semantic map to numpy array
+    semantic_map_np = semantic_map.squeeze(0).numpy()
+
+    # Concatenate original image and semantic map
+    concatenated_array = np.concatenate((image_array, semantic_map_np), axis=2)
+
+    return concatenated_array.shape  # Output: (4, 128, 128)
+
+class Datasethdf5RGB(Dataset):
+    def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
+        if semantic_map:
+            print("Preparing RGB data from hdf5 dataset with semantic channel (RGB + semantic) ...")
+            clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        else:
+            print("Preparing RGB data from hdf5 dataset ...")
+        
         self.frame_skip = frame_skip
 
         sequence_dirs = glob(f"{path}/**/*.hdf5", recursive=True)
@@ -445,13 +485,18 @@ class Dataset_hdf5(Dataset):
             task = seq_dir.split("/")[-2].replace('_', ' ')
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
-                for demo in data:
-                    obs = f['data'][demo]['obs']['sideview_image'][::frame_skip+1]
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::frame_skip+1]
+                for demo in tqdm(data):
+                    obs = f['data'][demo]['obs']['sideview_image'][::frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::frame_skip+1]/255.0
                     for i in range(len(obs)):
-                        self.obs.append(obs[i])
-                        self.next_obs.append(next_obs[i])
-                        self.tasks.append(task)
+                        if semantic_map:
+                            self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
+                            self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
+                            self.tasks.append(task)
+                        else:
+                            self.obs.append(obs[i])
+                            self.next_obs.append(next_obs[i])
+                            self.tasks.append(task)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -466,19 +511,141 @@ class Dataset_hdf5(Dataset):
 
     def __getitem__(self, idx):
         samples = self.get_samples(idx)
-        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")/255.0).float()
+        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")).float()
         # x = rearrange(images[:, 1:], "c f h w -> (f c) h w")
-        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')/255.0).float()
+        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
         task = self.tasks[idx]
         return x, x_cond, task
 
-class MarkovianDatasethdf5(Dataset_hdf5):
+class Datasethdf5RGBD(Dataset):
+    def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
+        if semantic_map:
+            print("Preparing RGBD data from hdf5 dataset with semantic channel (RGBD + semantic) ...")
+            clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        else:
+            print("Preparing RGBD data from hdf5 dataset ...")
+        
+        self.frame_skip = frame_skip
+
+        sequence_dirs = glob(f"{path}/**/*.hdf5", recursive=True)
+        self.tasks = []
+        self.obs = []
+        self.next_obs = []
+        self.depth_max = 1.099
+        self.depth_min = 0.507
+
+
+        for seq_dir in sequence_dirs:
+            print(f'Loading from {seq_dir}')
+            task = seq_dir.split("/")[-2].replace('_', ' ')
+            with h5py.File(seq_dir, 'r') as f:
+                data = f['data']
+                for demo in tqdm(data):
+                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
+
+                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
+                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
+                    obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
+                    next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+
+                    obs = np.concatenate((obs, obs_depth), axis=3)
+                    next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
+                    for i in range(len(obs)):
+                        # clip depth
+                        if semantic_map:
+                            self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
+                            self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
+                            self.tasks.append(task)
+                        else:
+                            self.obs.append(obs[i])
+                            self.next_obs.append(next_obs[i])
+                            self.tasks.append(task)
+        
+        self.transform = video_transforms.Compose([
+                volume_transforms.ClipToTensor()
+        ])
+        print('Done')
+
+    def get_samples(self, idx):
+        return [self.obs[idx], self.next_obs[idx]]
+
+    def __len__(self):
+        return len(self.obs)
+
     def __getitem__(self, idx):
-        pass
+        samples = self.get_samples(idx)
+        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")).float()
+        # x = rearrange(images[:, 1:], "c f h w -> (f c) h w")
+        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
+        task = self.tasks[idx]
+        return x, x_cond, task
+    
+class Datasethdf5RGBDFlow(Dataset):
+    def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
+        if semantic_map:
+            print("Preparing RGBD data from hdf5 dataset with semantic channel (RGBD + semantic) ...")
+            clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        else:
+            print("Preparing RGBD data from hdf5 dataset ...")
+        
+        self.frame_skip = frame_skip
 
-    def get_first_frame(self, idx):
-        pass
+        sequence_dirs = glob(f"{path}/**/*.hdf5", recursive=True)
+        self.tasks = []
+        self.obs = []
+        self.next_obs = []
+        self.depth_max = 1.099
+        self.depth_min = 0.507
 
+
+        for seq_dir in sequence_dirs:
+            print(f'Loading from {seq_dir}')
+            task = seq_dir.split("/")[-2].replace('_', ' ')
+            with h5py.File(seq_dir, 'r') as f:
+                data = f['data']
+                for demo in tqdm(data):
+                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
+
+                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
+                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
+                    obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
+                    next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+
+                    obs = np.concatenate((obs, obs_depth), axis=3)
+                    next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
+                    for i in range(len(obs)):
+                        # clip depth
+                        if semantic_map:
+                            self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
+                            self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
+                            self.tasks.append(task)
+                        else:
+                            self.obs.append(obs[i])
+                            self.next_obs.append(next_obs[i])
+                            self.tasks.append(task)
+        
+        self.transform = video_transforms.Compose([
+                volume_transforms.ClipToTensor()
+        ])
+        print('Done')
+
+    def get_samples(self, idx):
+        return [self.obs[idx], self.next_obs[idx]]
+
+    def __len__(self):
+        return len(self.obs)
+
+    def __getitem__(self, idx):
+        samples = self.get_samples(idx)
+        x_cond = torch.from_numpy(rearrange(samples[0], "h w c -> c h w")).float()
+        # x = rearrange(images[:, 1:], "c f h w -> (f c) h w")
+        x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
+        task = self.tasks[idx]
+        return x, x_cond, task
 
 
 if __name__ == "__main__":

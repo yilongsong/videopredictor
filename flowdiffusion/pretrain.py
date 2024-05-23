@@ -1,8 +1,8 @@
 from goal_diffusion import GoalGaussianDiffusion, Trainer
-from unet import UnetMW as Unet
+from unet import UnetRGB, UnetRGBD, UnetRGBDFlow
 from transformers import CLIPTextModel, CLIPTokenizer
 from datasets import SequentialDatasetv2
-from datasets import Dataset_hdf5
+from datasets import Datasethdf5RGB, Datasethdf5RGBD, Datasethdf5RGBDFlow
 from torch.utils.data import Subset
 import argparse
 
@@ -11,25 +11,65 @@ def main(args):
     sample_per_seq = 2
     target_size = (128, 128)
 
+    # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
+    datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
+
     if args.mode == 'inference':
-        train_set = valid_set = Dataset_hdf5(
-            path="/users/ysong135/scratch/datasets/",
-            frame_skip=3,
-            random_crop=True
-        )
+        if args.modality == 'RGB':
+            train_set = Datasethdf5RGB(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
+        elif args.modality == 'RGB-D':
+            train_set = Datasethdf5RGBD(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
+        elif args.modality == 'OF':
+            train_set = Datasethdf5RGBDFlow(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
     else:
-        train_set = Dataset_hdf5(
-            path="/users/ysong135/scratch/datasets/",
-            frame_skip=3,
-            random_crop=True
-        )
+        if args.modality == 'RGB':
+            train_set = Datasethdf5RGB(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
+        elif args.modality == 'RGB-D':
+            train_set = Datasethdf5RGBD(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
+        elif args.modality == 'OF':
+            train_set = Datasethdf5RGBDFlow(
+                path=datasets_path,
+                semantic_map=args.semantic,
+                frame_skip=3,
+                random_crop=True
+            )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
         valid_set = Subset(train_set, valid_inds)
         #train_set.obs, train_set.next_obs = train_set.obs[:-valid_n], train_set.next_obs[:-valid_n]
 
-    unet = Unet()
+    if args.modality == 'RGB':
+        unet = UnetRGB()
+    elif args.modality == 'RGB-D':
+        unet = UnetRGBD()
+    elif args.modality == 'OF':
+        unet = UnetRGBDFlow()
 
     pretrained_model = "openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
@@ -71,7 +111,7 @@ def main(args):
 
     if args.checkpoint_num is not None:
         trainer.load(args.checkpoint_num)
-    
+
     if args.mode == 'train':
         trainer.train()
     else:
@@ -103,15 +143,15 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--mode', type=str, default='train', choices=['train', 'inference']) # set to 'inference' to generate samples
+    parser.add_argument('-o', '--modality', type=str, default='RGB', choices=['RGB', 'RGB-D', 'OF'])
     parser.add_argument('-c', '--checkpoint_num', type=int, default=None) # set to checkpoint number to resume training or generate samples
-    #parser.add_argument('-p', '--inference_path', type=str, default=None) # set to path to generate samples
     parser.add_argument('-t', '--text', type=str, default=None) # set to text to generate samples
     parser.add_argument('-n', '--sample_steps', type=int, default=100) # set to number of steps to sample
     parser.add_argument('-g', '--guidance_weight', type=int, default=0) # set to positive to use guidance
+    parser.add_argument('-s', '--semantic', action='store_true', help='Add semantic channel')
     args = parser.parse_args()
     if args.mode == 'inference':
         assert args.checkpoint_num is not None
-        #assert args.inference_path is not None
         assert args.text is not None
         assert args.sample_steps <= 100
     main(args)
