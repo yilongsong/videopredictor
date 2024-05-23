@@ -11,8 +11,8 @@ def main(args):
     sample_per_seq = 2
     target_size = (128, 128)
 
-    # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
-    datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
+    datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
+    # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
 
     if args.mode == 'inference':
         if args.modality == 'RGB':
@@ -22,7 +22,7 @@ def main(args):
                 frame_skip=3,
                 random_crop=True
             )
-        elif args.modality == 'RGB-D':
+        elif args.modality == 'RGBD':
             train_set = Datasethdf5RGBD(
                 path=datasets_path,
                 semantic_map=args.semantic,
@@ -46,7 +46,7 @@ def main(args):
                 frame_skip=3,
                 random_crop=True
             )
-        elif args.modality == 'RGB-D':
+        elif args.modality == 'RGBD':
             train_set = Datasethdf5RGBD(
                 path=datasets_path,
                 semantic_map=args.semantic,
@@ -66,7 +66,7 @@ def main(args):
 
     if args.modality == 'RGB':
         unet = UnetRGB()
-    elif args.modality == 'RGB-D':
+    elif args.modality == 'RGBD':
         unet = UnetRGBD()
     elif args.modality == 'OF':
         unet = UnetRGBDFlow()
@@ -97,7 +97,7 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps =60000,
-        save_and_sample_every =2500,
+        save_and_sample_every =2,
         ema_update_every = 10,
         ema_decay = 0.999,
         train_batch_size =4,
@@ -120,6 +120,12 @@ def main(args):
         import imageio
         import torch
         from os.path import splitext
+
+        c = 3
+        if args.modality == 'RGBD':
+            c = 4
+        elif args.modality == 'OF':
+            c = 1
         text = args.text
         guidance_weight = args.guidance_weight
         obs_next_text = valid_set[np.random.randint(len(valid_set))]
@@ -128,14 +134,18 @@ def main(args):
         instruction = obs_next_text[2]
         batch_size = 1
         output = trainer.sample(obs.unsqueeze(0), [text], batch_size, guidance_weight).cpu()
-        output = output[0].reshape(-1, 3, *target_size)
+        output = output[0].reshape(-1, c, *target_size)
         output = torch.cat([obs.unsqueeze(0), output], dim=0)
         output_gt = torch.cat([obs.unsqueeze(0), next_obs.unsqueeze(0)], dim=0)
 
         output_gif = '../examples/' + text.replace(' ', '_') + '_out.gif'
         output_gt_gif = '../examples/' + text.replace(' ', '_') + '_out_gt.gif'
-        output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
-        output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
+        if args.modality == 'RGB':
+            output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
+            output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
+        elif args.modality == 'RGBD':
+            output = (output.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
+            output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
         imageio.mimsave(output_gif, output, duration=200, loop=1000)
         imageio.mimsave(output_gt_gif, output_gt, duration=200, loop=1000)
         print(f'Generated {output_gif}')
@@ -143,7 +153,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--mode', type=str, default='train', choices=['train', 'inference']) # set to 'inference' to generate samples
-    parser.add_argument('-o', '--modality', type=str, default='RGB', choices=['RGB', 'RGB-D', 'OF'])
+    parser.add_argument('-o', '--modality', type=str, default='RGB', choices=['RGB', 'RGBD', 'OF'])
     parser.add_argument('-c', '--checkpoint_num', type=int, default=None) # set to checkpoint number to resume training or generate samples
     parser.add_argument('-t', '--text', type=str, default=None) # set to text to generate samples
     parser.add_argument('-n', '--sample_steps', type=int, default=100) # set to number of steps to sample
