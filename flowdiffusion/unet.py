@@ -88,14 +88,9 @@ class UnetRGB(nn.Module):
         )
     def forward(self, x, t, task_embed=None, **kwargs):
         f = x.shape[1] // 3 - 1 
-        print(f)
-        print(x.shape)
         x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        print(x_cond.shape)
         x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', c=3)
-        print(x.shape)
         x = torch.cat([x, x_cond], dim=1)
-        print(x.shape)
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')
     
