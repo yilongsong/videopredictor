@@ -91,7 +91,7 @@ def main(args):
         output = output[0].reshape(-1, 3, *target_size)
         output = torch.cat([obs.unsqueeze(0), output], dim=0)
         output_gt = torch.cat([obs.unsqueeze(0), next_obs.unsqueeze(0)], dim=0)
-        root, ext = splitext(args.inference_path)
+
         output_gif = '../examples/' + text.replace(' ', '_') + '_out.gif'
         output_gt_gif = '../examples/' + text.replace(' ', '_') + '_out_gt.gif'
         output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype('uint8')
@@ -104,14 +104,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--mode', type=str, default='train', choices=['train', 'inference']) # set to 'inference' to generate samples
     parser.add_argument('-c', '--checkpoint_num', type=int, default=None) # set to checkpoint number to resume training or generate samples
-    parser.add_argument('-p', '--inference_path', type=str, default=None) # set to path to generate samples
+    #parser.add_argument('-p', '--inference_path', type=str, default=None) # set to path to generate samples
     parser.add_argument('-t', '--text', type=str, default=None) # set to text to generate samples
     parser.add_argument('-n', '--sample_steps', type=int, default=100) # set to number of steps to sample
     parser.add_argument('-g', '--guidance_weight', type=int, default=0) # set to positive to use guidance
     args = parser.parse_args()
     if args.mode == 'inference':
         assert args.checkpoint_num is not None
-        assert args.inference_path is not None
+        #assert args.inference_path is not None
         assert args.text is not None
         assert args.sample_steps <= 100
     main(args)
