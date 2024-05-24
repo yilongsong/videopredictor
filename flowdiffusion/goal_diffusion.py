@@ -857,6 +857,22 @@ class Trainer(object):
         task_embeds = self.encode_batch_text(batch_text)
         return self.ema.ema_model.sample(x_conds.to(device), task_embeds.to(device), batch_size=batch_size, guidance_weight=guidance_weight)
 
+    def visualize_depth_image(self, depth_images):
+        depth_images = torch.randn(9, 1, 128, 128)
+
+        # Selecting a single depth image for visualization (e.g., the first one)
+        depth_image = depth_images[0, 0]  # Selecting the first image and squeezing out the singleton dimension
+
+        # Converting the tensor to a numpy array
+        depth_image_np = depth_image.cpu().numpy()
+
+        # Plotting the depth image
+        plt.imshow(depth_image_np, cmap='gray')
+        plt.colorbar()
+        plt.title('Depth Image')
+        plt.axis('off')  # Turn off axis
+        plt.show()
+
     def train(self):
         accelerator = self.accelerator
         device = accelerator.device
@@ -936,6 +952,7 @@ class Trainer(object):
                         all_xs = torch.cat(all_xs_list, dim = 0).detach().cpu()
                         all_xs = rearrange(all_xs, 'b (n c) h w -> b n c h w', n=n_rows)
                         # print(all_xs.shape)
+                        #print(all_xs.shape)
 
                         gt_first = gt_xs[:, :1]
                         gt_last = gt_xs[:, -1:]
@@ -947,11 +964,15 @@ class Trainer(object):
                             os.makedirs(str(self.results_folder / f'imgs'), exist_ok = True)
                             gt_img = torch.cat([gt_first, gt_last, gt_xs], dim=1)
                             gt_img = rearrange(gt_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
+                            if gt_img.shape[1] == 4:
+                                gt_img = gt_img[:,-2:-1,:,:]
                             utils.save_image(gt_img, str(self.results_folder / f'imgs/gt_img.png'), nrow=n_rows+2)
 
                         os.makedirs(str(self.results_folder / f'imgs/outputs'), exist_ok = True)
                         pred_img = torch.cat([gt_first, gt_last,  all_xs], dim=1)
                         pred_img = rearrange(pred_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
+                        if pred_img.shape[1] == 4:
+                            pred_img = pred_img[:,-2:-1,:,:]
                         utils.save_image(pred_img, str(self.results_folder / f'imgs/outputs/sample-{milestone}.png'), nrow=n_rows+2)
 
                         self.save(milestone)

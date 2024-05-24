@@ -10,6 +10,7 @@ def main(args):
     valid_n = 3
     sample_per_seq = 2
     target_size = (128, 128)
+    channels = 3
 
     datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
     # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
@@ -66,10 +67,13 @@ def main(args):
 
     if args.modality == 'RGB':
         unet = UnetRGB()
+        channels = 3
     elif args.modality == 'RGBD':
         unet = UnetRGBD()
+        channels = 4
     elif args.modality == 'OF':
         unet = UnetRGBDFlow()
+        channels = 4
 
     pretrained_model = "openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
@@ -78,7 +82,7 @@ def main(args):
     text_encoder.eval()
 
     diffusion = GoalGaussianDiffusion(
-        channels=3*(sample_per_seq-1),
+        channels=channels*(sample_per_seq-1),
         model=unet,
         image_size=target_size,
         timesteps=100,
@@ -121,11 +125,6 @@ def main(args):
         import torch
         from os.path import splitext
 
-        c = 3
-        if args.modality == 'RGBD':
-            c = 4
-        elif args.modality == 'OF':
-            c = 1
         text = args.text
         guidance_weight = args.guidance_weight
         obs_next_text = valid_set[np.random.randint(len(valid_set))]
@@ -134,7 +133,7 @@ def main(args):
         instruction = obs_next_text[2]
         batch_size = 1
         output = trainer.sample(obs.unsqueeze(0), [text], batch_size, guidance_weight).cpu()
-        output = output[0].reshape(-1, c, *target_size)
+        output = output[0].reshape(-1, channels, *target_size)
         output = torch.cat([obs.unsqueeze(0), output], dim=0)
         output_gt = torch.cat([obs.unsqueeze(0), next_obs.unsqueeze(0)], dim=0)
 
@@ -146,6 +145,8 @@ def main(args):
         elif args.modality == 'RGBD':
             output = (output.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
             output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
+            print(output.shape)
+            print(output_gt.shape)
         imageio.mimsave(output_gif, output, duration=200, loop=1000)
         imageio.mimsave(output_gt_gif, output_gt, duration=200, loop=1000)
         print(f'Generated {output_gif}')
