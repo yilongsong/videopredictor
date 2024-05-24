@@ -517,6 +517,24 @@ class Datasethdf5RGB(Dataset):
         task = self.tasks[idx]
         return x, x_cond, task
 
+def visualize_depth_image(rgb_image, depth_channel):
+    import cv2
+    from matplotlib import pyplot as plt
+    # Display RGB image
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB))
+    plt.title('RGB Image')
+    plt.axis('off')
+
+    # Display Depth image
+    plt.subplot(1, 2, 2)
+    plt.imshow(depth_channel[:,:,0], cmap='gray', vmin=0.0, vmax=1.0)
+    plt.title('Depth Channel')
+    plt.axis('off')
+
+    plt.show()
+
 class Datasethdf5RGBD(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
@@ -547,8 +565,10 @@ class Datasethdf5RGBD(Dataset):
 
                     obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
                     next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
-                    obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
-                    next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+                    #obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
+                    obs_depth = (obs_depth - np.min(obs_depth)) / (np.max(obs_depth) - np.min(obs_depth)) # Normalize
+                    #next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+                    next_obs_depth = (next_obs_depth - np.min(next_obs_depth)) / (np.max(next_obs_depth) - np.min(next_obs_depth)) # Normalize
 
                     obs = np.concatenate((obs, obs_depth), axis=3)
                     next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
@@ -562,6 +582,13 @@ class Datasethdf5RGBD(Dataset):
                             self.obs.append(obs[i])
                             self.next_obs.append(next_obs[i])
                             self.tasks.append(task)
+
+                            rgb = (obs[i][:,:,:3]*255).astype('uint8')
+                            # print(depth[:,:,0].shape)
+                            # print(depth)
+                            # # rgb = np.transpose((obs[i][:,:,:3]*255), (2, 0, 1)).astype('uint8')
+                            # # depth = np.transpose(obs[i][:,:,3:], (2, 0, 1)).astype('uint8')
+                            # visualize_depth_image(rgb, depth)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -613,12 +640,13 @@ class Datasethdf5RGBDFlow(Dataset):
                     obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
                     next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
                     obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
+                    obs_depth = (obs_depth - self.depth_min) / (self.depth_max - self.depth_min) # Normalize
                     next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+                    next_obs_depth = (next_obs_depth - self.depth_min) / (self.depth_max - self.depth_min) # Normalize
 
                     obs = np.concatenate((obs, obs_depth), axis=3)
                     next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
                     for i in range(len(obs)):
-                        # clip depth
                         if semantic_map:
                             self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
                             self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))

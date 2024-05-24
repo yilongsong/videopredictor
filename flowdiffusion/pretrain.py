@@ -7,13 +7,13 @@ from torch.utils.data import Subset
 import argparse
 
 def main(args):
-    valid_n = 3
+    valid_n = 1
     sample_per_seq = 2
     target_size = (128, 128)
     channels = 3
 
-    datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
-    # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
+    # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
+    datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
 
     if args.mode == 'inference':
         if args.modality == 'RGB':
@@ -101,11 +101,11 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps =60000,
-        save_and_sample_every =2,
+        save_and_sample_every =100,
         ema_update_every = 10,
         ema_decay = 0.999,
-        train_batch_size =4,
-        valid_batch_size =4,
+        train_batch_size =1,
+        valid_batch_size =1,
         gradient_accumulate_every = 1,
         num_samples=valid_n, 
         results_folder ='../results/pretrain',
