@@ -583,7 +583,7 @@ class Datasethdf5RGBD(Dataset):
                             self.next_obs.append(next_obs[i])
                             self.tasks.append(task)
 
-                            rgb = (obs[i][:,:,:3]*255).astype('uint8')
+                            # rgb = (obs[i][:,:,:3]*255).astype('uint8')
                             # print(depth[:,:,0].shape)
                             # print(depth)
                             # # rgb = np.transpose((obs[i][:,:,:3]*255), (2, 0, 1)).astype('uint8')
