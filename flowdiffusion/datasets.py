@@ -486,8 +486,8 @@ class Datasethdf5RGB(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    obs = f['data'][demo]['obs']['sideview_image'][::frame_skip+1]/255.0
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::frame_skip+1]/255.0
+                    obs = f['data'][demo]['obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
                     for i in range(len(obs)):
                         if semantic_map:
                             self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
@@ -560,7 +560,7 @@ class Datasethdf5RGBD(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1]/255.0
+                    obs = f['data'][demo]['obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
                     next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
 
                     obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
@@ -609,7 +609,7 @@ class Datasethdf5RGBD(Dataset):
         task = self.tasks[idx]
         return x, x_cond, task
     
-class Datasethdf5RGBDFlow(Dataset):
+class Datasethdf5Flow(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
             print("Preparing RGBD data from hdf5 dataset with semantic channel (RGBD + semantic) ...")

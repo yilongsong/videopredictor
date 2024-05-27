@@ -1,5 +1,5 @@
 from goal_diffusion import GoalGaussianDiffusion, Trainer
-from unet import UnetRGB, UnetRGBD, UnetRGBDFlow
+from unet import UnetRGB, UnetRGBD, UnetFlow
 from transformers import CLIPTextModel, CLIPTokenizer
 from datasets import SequentialDatasetv2
 from datasets import Datasethdf5RGB, Datasethdf5RGBD, Datasethdf5RGBDFlow
@@ -30,7 +30,7 @@ def main(args):
                 frame_skip=3,
                 random_crop=True
             )
-        elif args.modality == 'OF':
+        elif args.modality == 'flow':
             train_set = Datasethdf5RGBDFlow(
                 path=datasets_path,
                 semantic_map=args.semantic,
@@ -54,7 +54,7 @@ def main(args):
                 frame_skip=3,
                 random_crop=True
             )
-        elif args.modality == 'OF':
+        elif args.modality == 'flow':
             train_set = Datasethdf5RGBDFlow(
                 path=datasets_path,
                 semantic_map=args.semantic,
@@ -71,8 +71,8 @@ def main(args):
     elif args.modality == 'RGBD':
         unet = UnetRGBD()
         channels = 4
-    elif args.modality == 'OF':
-        unet = UnetRGBDFlow()
+    elif args.modality == 'flow':
+        unet = UnetFlow()
         channels = 4
 
     pretrained_model = "openai/clip-vit-base-patch32"
@@ -154,7 +154,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--mode', type=str, default='train', choices=['train', 'inference']) # set to 'inference' to generate samples
-    parser.add_argument('-o', '--modality', type=str, default='RGB', choices=['RGB', 'RGBD', 'OF'])
+    parser.add_argument('-o', '--modality', type=str, default='RGB', choices=['RGB', 'RGBD', 'flow'])
     parser.add_argument('-c', '--checkpoint_num', type=int, default=None) # set to checkpoint number to resume training or generate samples
     parser.add_argument('-t', '--text', type=str, default=None) # set to text to generate samples
     parser.add_argument('-n', '--sample_steps', type=int, default=100) # set to number of steps to sample
