@@ -119,6 +119,26 @@ def Downsample(dim, dim_out = None):
         nn.Conv2d(dim * 4, default(dim_out, dim), 1)
     )
 
+def visualize_RGB(image1, image2):
+    """
+    Visualize two (128, 128, 3) RGB images side by side.
+
+    Parameters:
+    image1 (numpy.ndarray): The first RGB image array with shape (128, 128, 3).
+    image2 (numpy.ndarray): The second RGB image array with shape (128, 128, 3).
+    """
+    fig, axes = plt.subplots(1, 2)  # Create a figure with two subplots
+    
+    axes[0].imshow(image1)
+    axes[0].axis('off')  # Turn off axis for the first subplot
+    axes[0].set_title('Image 1')  # Set a title for the first subplot
+    
+    axes[1].imshow(image2)
+    axes[1].axis('off')  # Turn off axis for the second subplot
+    axes[1].set_title('Image 2')  # Set a title for the second subplot
+    
+    plt.show()
+
 class WeightStandardizedConv2d(nn.Conv2d):
     """
     https://arxiv.org/abs/1903.10520
@@ -922,15 +942,15 @@ class Trainer(object):
                         with torch.no_grad():
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.valid_batch_size)
-                            ### get val_imgs from self.valid_dl
                             x_conds = []
                             xs = []
                             task_embeds = []
+                            
                             for i, (x, x_cond, label) in enumerate(self.valid_dl):
                                 xs.append(x)
                                 x_conds.append(x_cond.to(device))
                                 task_embeds.append(self.encode_batch_text(label))
-                            
+                                
                             with self.accelerator.autocast():
                                 all_xs_list = list(map(lambda n, c, e: self.ema.ema_model.sample(batch_size=n, x_cond=c, task_embed=e), batches, x_conds, task_embeds))
                         
@@ -951,14 +971,9 @@ class Trainer(object):
                         # x_conds = rearrange(x_conds, 'b (n c) h w -> b n c h w', n=1)
                         all_xs = torch.cat(all_xs_list, dim = 0).detach().cpu()
                         all_xs = rearrange(all_xs, 'b (n c) h w -> b n c h w', n=n_rows)
-                        # print(all_xs.shape)
-                        #print(all_xs.shape)
 
-                        gt_first = gt_xs[:, :1]
+                        gt_first = x_conds.unsqueeze(1)
                         gt_last = gt_xs[:, -1:]
-                        # print(gt_first.shape)
-                        # print(gt_last.shape)
-
 
                         if self.step == self.save_and_sample_every:
                             os.makedirs(str(self.results_folder / f'imgs'), exist_ok = True)
@@ -966,6 +981,8 @@ class Trainer(object):
                             gt_img = rearrange(gt_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
                             if gt_img.shape[1] == 4:
                                 gt_img = gt_img[:,3:,:,:]
+                            elif gt_last.shape[1] == 2:
+                                print('flow')
                                 #self.visualize_depth_image(np.transpose(gt_img[:,:3,:,:].numpy(), (0, 2, 3, 1)), depth_img[0])
                             utils.save_image(gt_img, str(self.results_folder / f'imgs/gt_img.png'), nrow=n_rows+2)
 

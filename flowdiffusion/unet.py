@@ -123,14 +123,14 @@ class UnetRGBD(nn.Module):
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')
     
-class UnetRGBDFlow(nn.Module):
+class UnetFlow(nn.Module):
     def __init__(self):
-        super(UnetRGBDFlow, self).__init__()
+        super(UnetFlow, self).__init__()
         self.unet = UNetModel(
             image_size=(128, 128),
-            in_channels=8,
+            in_channels=5,
             model_channels=128,
-            out_channels=1,
+            out_channels=2,
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
@@ -145,12 +145,12 @@ class UnetRGBDFlow(nn.Module):
             num_head_channels=32,
         )
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 4 - 1 
-        x_cond = repeat(x[:, -4:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-4], 'b (f c) h w -> b c f h w', c=4)
+        f = 1 # Only works for 1 frame prediction
+        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
+        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', f=f) # Two channled flow
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
-        return rearrange(out, 'b c f h w -> b (f c) h w', c=1)
+        return rearrange(out, 'b c f h w -> b (f c) h w')
 
 class UnetMW_flow(nn.Module):
     def __init__(self):

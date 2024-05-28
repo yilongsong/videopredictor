@@ -1,13 +1,33 @@
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from unet import UnetRGB, UnetRGBD, UnetFlow
 from transformers import CLIPTextModel, CLIPTokenizer
-from datasets import SequentialDatasetv2
-from datasets import Datasethdf5RGB, Datasethdf5RGBD, Datasethdf5RGBDFlow
+from datasets import Datasethdf5RGB, Datasethdf5RGBD, Datasethdf5Flow
 from torch.utils.data import Subset
 import argparse
 
+from matplotlib import pyplot as plt
+def visualize_RGB(image1, image2):
+    """
+    Visualize two (128, 128, 3) RGB images side by side.
+
+    Parameters:
+    image1 (numpy.ndarray): The first RGB image array with shape (128, 128, 3).
+    image2 (numpy.ndarray): The second RGB image array with shape (128, 128, 3).
+    """
+    fig, axes = plt.subplots(1, 2)  # Create a figure with two subplots
+    
+    axes[0].imshow(image1)
+    axes[0].axis('off')  # Turn off axis for the first subplot
+    axes[0].set_title('Image 1')  # Set a title for the first subplot
+    
+    axes[1].imshow(image2)
+    axes[1].axis('off')  # Turn off axis for the second subplot
+    axes[1].set_title('Image 2')  # Set a title for the second subplot
+    
+    plt.show()
+
 def main(args):
-    valid_n = 1
+    valid_n = 3
     sample_per_seq = 2
     target_size = (128, 128)
     channels = 3
@@ -20,7 +40,7 @@ def main(args):
             train_set = Datasethdf5RGB(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=5,
                 random_crop=True
             )
         elif args.modality == 'RGBD':
@@ -31,7 +51,7 @@ def main(args):
                 random_crop=True
             )
         elif args.modality == 'flow':
-            train_set = Datasethdf5RGBDFlow(
+            train_set = Datasethdf5Flow(
                 path=datasets_path,
                 semantic_map=args.semantic,
                 frame_skip=3,
@@ -44,7 +64,7 @@ def main(args):
             train_set = Datasethdf5RGB(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=5,
                 random_crop=True
             )
         elif args.modality == 'RGBD':
@@ -55,7 +75,7 @@ def main(args):
                 random_crop=True
             )
         elif args.modality == 'flow':
-            train_set = Datasethdf5RGBDFlow(
+            train_set = Datasethdf5Flow(
                 path=datasets_path,
                 semantic_map=args.semantic,
                 frame_skip=3,
@@ -73,7 +93,7 @@ def main(args):
         channels = 4
     elif args.modality == 'flow':
         unet = UnetFlow()
-        channels = 4
+        channels = 2
 
     pretrained_model = "openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
@@ -145,8 +165,6 @@ def main(args):
         elif args.modality == 'RGBD':
             output = (output.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
             output_gt = (output_gt.cpu().numpy().transpose(0, 2, 3, 1)[:,:,:,-1].clip(0, 1) * 255).astype('uint8')
-            print(output.shape)
-            print(output_gt.shape)
         imageio.mimsave(output_gif, output, duration=200, loop=1000)
         imageio.mimsave(output_gt_gif, output_gt, duration=200, loop=1000)
         print(f'Generated {output_gif}')

@@ -12,12 +12,20 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "pretrain",
+            "name": "pretrain RGBD",
             "type": "debugpy",
             "request": "launch",
             "program": "flowdiffusion/pretrain.py",
             "console": "integratedTerminal",
-            "args": ["--mode=train"]
+            "args": ["--mode=train", "-o=RGBD"]
+        },
+        {
+            "name": "pretrain flow",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "flowdiffusion/pretrain.py",
+            "console": "integratedTerminal",
+            "args": ["--mode=train", "-o=flow"]
         },
         {
             "name": "train_mw",

@@ -15,8 +15,13 @@ from einops import rearrange
 
 import h5py
 from transformers import CLIPProcessor, CLIPModel
-
 random.seed(0)
+from matplotlib import pyplot as plt
+
+import sys
+sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow')
+import get_flow
+
 
 ### Sequential Datasets: given first frame, predict all the future frames
 
@@ -463,6 +468,26 @@ def get_image_with_semantic_map(clip_model, clip_processor, image_array):
 
     return concatenated_array.shape  # Output: (4, 128, 128)
 
+def visualize_RGB(image1, image2):
+    """
+    Visualize two (128, 128, 3) RGB images side by side.
+
+    Parameters:
+    image1 (numpy.ndarray): The first RGB image array with shape (128, 128, 3).
+    image2 (numpy.ndarray): The second RGB image array with shape (128, 128, 3).
+    """
+    fig, axes = plt.subplots(1, 2)  # Create a figure with two subplots
+    
+    axes[0].imshow(image1)
+    axes[0].axis('off')  # Turn off axis for the first subplot
+    axes[0].set_title('Image 1')  # Set a title for the first subplot
+    
+    axes[1].imshow(image2)
+    axes[1].axis('off')  # Turn off axis for the second subplot
+    axes[1].set_title('Image 2')  # Set a title for the second subplot
+    
+    plt.show()
+
 class Datasethdf5RGB(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
@@ -486,8 +511,8 @@ class Datasethdf5RGB(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    obs = f['data'][demo]['obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
+                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
                     for i in range(len(obs)):
                         if semantic_map:
                             self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
@@ -560,12 +585,12 @@ class Datasethdf5RGBD(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    obs = f['data'][demo]['obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
-
-                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
-                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
-                    #obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
+                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
+                    
+                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][self.frame_skip:][::self.frame_skip+1]
+                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1][:len(next_obs)]
+                    #obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max) # Clipping is problematic
                     obs_depth = (obs_depth - np.min(obs_depth)) / (np.max(obs_depth) - np.min(obs_depth)) # Normalize
                     #next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
                     next_obs_depth = (next_obs_depth - np.min(next_obs_depth)) / (np.max(next_obs_depth) - np.min(next_obs_depth)) # Normalize
@@ -582,13 +607,6 @@ class Datasethdf5RGBD(Dataset):
                             self.obs.append(obs[i])
                             self.next_obs.append(next_obs[i])
                             self.tasks.append(task)
-
-                            # rgb = (obs[i][:,:,:3]*255).astype('uint8')
-                            # print(depth[:,:,0].shape)
-                            # print(depth)
-                            # # rgb = np.transpose((obs[i][:,:,:3]*255), (2, 0, 1)).astype('uint8')
-                            # # depth = np.transpose(obs[i][:,:,3:], (2, 0, 1)).astype('uint8')
-                            # visualize_depth_image(rgb, depth)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -627,6 +645,10 @@ class Datasethdf5Flow(Dataset):
         self.depth_max = 1.099
         self.depth_min = 0.507
 
+        resume = '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow/pretrained/gmflow_sintel-0c07dcb3.pth'
+
+        flow_model = get_flow.get_gmflow_model(resume)
+
 
         for seq_dir in sequence_dirs:
             print(f'Loading from {seq_dir}')
@@ -634,26 +656,18 @@ class Datasethdf5Flow(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1]/255.0
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][::self.frame_skip+1]/255.0
+                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
+                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
 
-                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1]
-                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][::self.frame_skip+1]
-                    obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max)
-                    obs_depth = (obs_depth - self.depth_min) / (self.depth_max - self.depth_min) # Normalize
-                    next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
-                    next_obs_depth = (next_obs_depth - self.depth_min) / (self.depth_max - self.depth_min) # Normalize
-
-                    obs = np.concatenate((obs, obs_depth), axis=3)
-                    next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
                     for i in range(len(obs)):
+                        flow = get_flow.get_gmflow_flow(flow_model, obs[i], next_obs[i])
                         if semantic_map:
                             self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
                             self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
                             self.tasks.append(task)
                         else:
                             self.obs.append(obs[i])
-                            self.next_obs.append(next_obs[i])
+                            self.next_obs.append(flow)
                             self.tasks.append(task)
         
         self.transform = video_transforms.Compose([
