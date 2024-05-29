@@ -713,6 +713,30 @@ class GoalGaussianDiffusion(nn.Module):
 
 # trainer class
 
+import cv2
+
+def flow_to_RGB(flow_tensor):
+    batch_size = flow_tensor.shape[0]
+    rgb_images = []
+    
+    for i in range(batch_size):
+        flow = flow_tensor[i, 0].numpy()
+        
+        flow_x, flow_y = flow[0], flow[1]
+        magnitude, angle = cv2.cartToPolar(flow_x, flow_y, angleInDegrees=True)
+        magnitude = cv2.normalize(magnitude, None, 0, 1, cv2.NORM_MINMAX)
+        hsv = np.zeros((flow.shape[1], flow.shape[2], 3), dtype=np.float32)
+        hsv[..., 0] = angle / 2  # OpenCV uses [0, 180] for hue, divide by 2 to fit [0, 360] into [0, 180]
+        hsv[..., 1] = magnitude
+        hsv[..., 2] = 1
+        rgb_image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+        rgb_image = (rgb_image * 255).astype(np.uint8)
+        rgb_images.append(torch.tensor(rgb_image).permute(2, 0, 1).unsqueeze(0))
+
+    rgb_tensor = torch.cat(rgb_images).unsqueeze(1)
+    
+    return rgb_tensor
+
 class Trainer(object):
     def __init__(
         self,
@@ -963,7 +987,7 @@ class Trainer(object):
                         # plt.axis('off')
                         # plt.show()
                         # make it [batchsize*n, 3, 120, 160]
-                        n_rows = gt_xs.shape[1] // 3
+                        n_rows = gt_xs.shape[1] // self.channels
                         gt_xs = rearrange(gt_xs, 'b (n c) h w -> b n c h w', n=n_rows)
                         ### save images
                         # print(gt_xs.shape)
@@ -975,15 +999,17 @@ class Trainer(object):
                         gt_first = x_conds.unsqueeze(1)
                         gt_last = gt_xs[:, -1:]
 
+                        if gt_last.shape[2] == 2: ## Visualize flow
+                                gt_last = flow_to_RGB(gt_last)
+                                gt_xs = flow_to_RGB(gt_xs)
+                                all_xs = flow_to_RGB(all_xs)
+                        
                         if self.step == self.save_and_sample_every:
                             os.makedirs(str(self.results_folder / f'imgs'), exist_ok = True)
                             gt_img = torch.cat([gt_first, gt_last, gt_xs], dim=1)
                             gt_img = rearrange(gt_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
                             if gt_img.shape[1] == 4:
                                 gt_img = gt_img[:,3:,:,:]
-                            elif gt_last.shape[1] == 2:
-                                print('flow')
-                                #self.visualize_depth_image(np.transpose(gt_img[:,:3,:,:].numpy(), (0, 2, 3, 1)), depth_img[0])
                             utils.save_image(gt_img, str(self.results_folder / f'imgs/gt_img.png'), nrow=n_rows+2)
 
                         os.makedirs(str(self.results_folder / f'imgs/outputs'), exist_ok = True)

@@ -35,6 +35,7 @@ def main(args):
     # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
     datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
 
+
     if args.mode == 'inference':
         if args.modality == 'RGB':
             train_set = Datasethdf5RGB(
