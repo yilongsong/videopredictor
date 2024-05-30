@@ -20,6 +20,14 @@
             "args": ["--mode=train", "-o=RGBD"]
         },
         {
+            "name": "pretrain flow semantic",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "flowdiffusion/pretrain.py",
+            "console": "integratedTerminal",
+            "args": ["--mode=train", "-o=flow", "-s"]
+        },
+        {
             "name": "pretrain flow",
             "type": "debugpy",
             "request": "launch",

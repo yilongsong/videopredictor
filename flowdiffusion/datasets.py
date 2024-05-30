@@ -17,49 +17,15 @@ import h5py
 from transformers import CLIPProcessor, CLIPModel
 random.seed(0)
 from matplotlib import pyplot as plt
+import scipy.ndimage
 
 import sys
 sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow')
 import get_flow
 
-sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm/scripts')
-import get_clip_features
-
-### Sequential Datasets: given first frame, predict all the future frames
-
-
-def visualize_semantic_map(image_tensor, semantic_map_np):
-    from matplotlib import pyplot as plt
-    plt.figure(figsize=(6, 6))
-    plt.subplot(1, 2, 1)
-    plt.imshow(image_tensor.permute(1, 2, 0))
-    plt.title('Original Image')
-    plt.axis('off')
-
-    # Visualize the semantic map
-    plt.subplot(1, 2, 2)
-    plt.imshow(semantic_map_np, cmap='viridis')
-    plt.title('Semantic Map')
-    plt.axis('off')
-
-    plt.show()
-
-def get_image_with_semantic_map(clip_model, clip_processor, image_array):
-    inputs = clip_processor(images=image_array, return_tensors="pt", padding=True)
-    with torch.no_grad():
-        image_features = clip_model.get_image_features(**inputs)
-
-    print(image_features.shape)
-    # Resize semantic map to (128, 128, 1)
-    semantic_map = torch.nn.functional.interpolate(image_features, size=(128, 128), mode="bicubic", align_corners=False)
-
-    # Convert semantic map to numpy array
-    semantic_map_np = semantic_map.squeeze(0).numpy()
-
-    # Concatenate original image and semantic map
-    concatenated_array = np.concatenate((image_array, semantic_map_np), axis=2)
-
-    return concatenated_array.shape  # Output: (4, 128, 128)
+sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm')
+import scripts.get_clip_features
+from features.clip import clip
 
 def visualize_RGB(image1, image2):
     """
@@ -81,6 +47,19 @@ def visualize_RGB(image1, image2):
     
     plt.show()
 
+class CLIPArgs:
+    model_name: str = "ViT-L/14@336px"
+    skip_center_crop: bool = True
+    batch_size: int = 64
+
+    @classmethod
+    def id_dict(cls):
+        """Return dict that identifies the CLIP model parameters."""
+        return {
+            "model_name": cls.model_name,
+            "skip_center_crop": cls.skip_center_crop,
+        }
+
 class Datasethdf5RGB(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
@@ -95,6 +74,10 @@ class Datasethdf5RGB(Dataset):
         self.obs = []
         self.next_obs = []
 
+        if semantic_map:
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            model, preprocess = clip.load(CLIPArgs.model_name, device=device)
+
 
         for seq_dir in sequence_dirs:
             print(f'Loading from {seq_dir}')
@@ -104,16 +87,22 @@ class Datasethdf5RGB(Dataset):
                 for demo in tqdm(data):
                     next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
                     obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
-                    next_obs_semantic = get_clip_features.get_clip_features(next_obs, task)
-                    obs_semantic = get_clip_features.get_clip_features(obs, task)
+                    if semantic_map:
+                        next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
+                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                        next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                        for i in range(obs.shape[0]):
+                            next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+
+                        obs = np.concatenate((obs, obs_heatmap), axis=3)
+                        next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
+
                     for i in range(len(obs)):
-                        if semantic_map:
-                            get_clip_features.get_clip_features(torch.tensor(obs[i]).permute(2, 0, 1), task)
-                            self.tasks.append(task)
-                        else:
-                            self.obs.append(obs[i])
-                            self.next_obs.append(next_obs[i])
-                            self.tasks.append(task)
+                        self.tasks.append(task)
+                        self.obs.append(obs[i])
+                        self.next_obs.append(next_obs[i])
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -170,6 +159,10 @@ class Datasethdf5RGBD(Dataset):
         self.depth_max = 1.099
         self.depth_min = 0.507
 
+        if semantic_map:
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            model, preprocess = clip.load(CLIPArgs.model_name, device=device)
+
 
         for seq_dir in sequence_dirs:
             print(f'Loading from {seq_dir}')
@@ -187,18 +180,25 @@ class Datasethdf5RGBD(Dataset):
                     #next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
                     next_obs_depth = (next_obs_depth - np.min(next_obs_depth)) / (np.max(next_obs_depth) - np.min(next_obs_depth)) # Normalize
 
+                    if semantic_map:
+                        next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
+                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                        next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                        for i in range(obs.shape[0]):
+                            next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+
+                        obs = np.concatenate((obs, obs_heatmap), axis=3)
+                        next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
+
                     obs = np.concatenate((obs, obs_depth), axis=3)
                     next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
+                    
                     for i in range(len(obs)):
-                        # clip depth
-                        if semantic_map:
-                            self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
-                            self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
-                            self.tasks.append(task)
-                        else:
-                            self.obs.append(obs[i])
-                            self.next_obs.append(next_obs[i])
-                            self.tasks.append(task)
+                        self.obs.append(obs[i])
+                        self.next_obs.append(next_obs[i])
+                        self.tasks.append(task)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -240,7 +240,10 @@ class Datasethdf5Flow(Dataset):
         resume = '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow/pretrained/gmflow_sintel-0c07dcb3.pth'
 
         flow_model = get_flow.get_gmflow_model(resume)
-
+        
+        if semantic_map:
+            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+            model, preprocess = clip.load(CLIPArgs.model_name, device=device)
 
         for seq_dir in sequence_dirs:
             print(f'Loading from {seq_dir}')
@@ -250,17 +253,19 @@ class Datasethdf5Flow(Dataset):
                 for demo in tqdm(data):
                     next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
                     obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
+                    if semantic_map:
+                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                        for i in range(obs.shape[0]):
+                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+
+                        obs = np.concatenate((obs, obs_heatmap), axis=3)
 
                     for i in range(len(obs)):
-                        flow = get_flow.get_gmflow_flow(flow_model, obs[i], next_obs[i])
-                        if semantic_map:
-                            self.obs.append(get_image_with_semantic_map(clip_model, clip_processor, obs[i]))
-                            self.next_obs.append(get_image_with_semantic_map(clip_model, clip_processor, next_obs[i]))
-                            self.tasks.append(task)
-                        else:
-                            self.obs.append(obs[i])
-                            self.next_obs.append(flow)
-                            self.tasks.append(task)
+                        flow = get_flow.get_gmflow_flow(flow_model, obs[i][:,:,:3], next_obs[i])
+                        self.obs.append(obs[i])
+                        self.next_obs.append(flow)
+                        self.tasks.append(task)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()

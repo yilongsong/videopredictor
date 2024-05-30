@@ -65,14 +65,39 @@ class UnetMW(nn.Module):
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')
 
+from matplotlib import pyplot as plt
+import numpy as np
+def visualize_RGB(image1, image2):
+    """
+    Visualize two (128, 128, 3) RGB images side by side.
+
+    Parameters:
+    image1 (numpy.ndarray): The first RGB image array with shape (128, 128, 3).
+    image2 (numpy.ndarray): The second RGB image array with shape (128, 128, 3).
+    """
+    fig, axes = plt.subplots(1, 2)  # Create a figure with two subplots
+    
+    axes[0].imshow(np.transpose(image1[0].squeeze(1), (1,2,0)))
+    axes[0].axis('off')  # Turn off axis for the first subplot
+    axes[0].set_title('Image 1')  # Set a title for the first subplot
+    
+    axes[1].imshow(np.transpose(image2[0].squeeze(1), (1,2,0)))
+    axes[1].axis('off')  # Turn off axis for the second subplot
+    axes[1].set_title('Image 2')  # Set a title for the second subplot
+    
+    plt.show()
+
 class UnetRGB(nn.Module):
-    def __init__(self):
+    def __init__(self, semantic):
         super(UnetRGB, self).__init__()
+        self.semantic_layer = 0
+        if semantic:
+            self.semantic_layer = 1
         self.unet = UNetModel(
             image_size=(128, 128),
-            in_channels=6,
+            in_channels=6 + 2*self.semantic_layer,
             model_channels=128,
-            out_channels=3,
+            out_channels=3 + self.semantic_layer,
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
@@ -87,21 +112,24 @@ class UnetRGB(nn.Module):
             num_head_channels=32,
         )
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 3 - 1 
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', c=3)
+        f = x.shape[1] // (3 + self.semantic_layer) - 1 
+        x_cond = repeat(x[:, -(3 + self.semantic_layer):], 'b c h w -> b c f h w', f=f)
+        x = rearrange(x[:, :-(3 + self.semantic_layer)], 'b (f c) h w -> b c f h w', c=(3 + self.semantic_layer))
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')
     
 class UnetRGBD(nn.Module):
-    def __init__(self):
+    def __init__(self, semantic):
         super(UnetRGBD, self).__init__()
+        self.semantic_layer = 0
+        if semantic:
+            self.semantic_layer = 1
         self.unet = UNetModel(
             image_size=(128, 128),
-            in_channels=8,
+            in_channels=8 + 2*self.semantic_layer,
             model_channels=128,
-            out_channels=4,
+            out_channels=4 + self.semantic_layer,
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
@@ -116,19 +144,22 @@ class UnetRGBD(nn.Module):
             num_head_channels=32,
         )
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 4 - 1 
-        x_cond = repeat(x[:, -4:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-4], 'b (f c) h w -> b c f h w', c=4)
+        f = x.shape[1] // (4 + self.semantic_layer) - 1 
+        x_cond = repeat(x[:, -(4+self.semantic_layer):], 'b c h w -> b c f h w', f=f)
+        x = rearrange(x[:, :-(4+self.semantic_layer)], 'b (f c) h w -> b c f h w', c=(4+self.semantic_layer))
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')
     
 class UnetFlow(nn.Module):
-    def __init__(self):
+    def __init__(self, semantic):
         super(UnetFlow, self).__init__()
+        self.semantic_layer = 0
+        if semantic:
+            self.semantic_layer = 1
         self.unet = UNetModel(
             image_size=(128, 128),
-            in_channels=5,
+            in_channels=5 + self.semantic_layer,
             model_channels=128,
             out_channels=2,
             num_res_blocks=2,
@@ -146,8 +177,8 @@ class UnetFlow(nn.Module):
         )
     def forward(self, x, t, task_embed=None, **kwargs):
         f = 1 # Only works for 1 frame prediction
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', f=f) # Two channled flow
+        x_cond = repeat(x[:, -(3+self.semantic_layer):], 'b c h w -> b c f h w', f=f)
+        x = rearrange(x[:, :-(3+self.semantic_layer)], 'b (f c) h w -> b c f h w', f=f) # Two channel flow
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, 'b c f h w -> b (f c) h w')

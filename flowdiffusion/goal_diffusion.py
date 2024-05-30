@@ -1010,6 +1010,8 @@ class Trainer(object):
                             gt_img = rearrange(gt_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
                             if gt_img.shape[1] == 4:
                                 gt_img = gt_img[:,3:,:,:]
+                            if gt_img.shape[1] == 5:
+                                gt_img = gt_img[:,4:,:,:]
                             utils.save_image(gt_img, str(self.results_folder / f'imgs/gt_img.png'), nrow=n_rows+2)
 
                         os.makedirs(str(self.results_folder / f'imgs/outputs'), exist_ok = True)
@@ -1017,6 +1019,8 @@ class Trainer(object):
                         pred_img = rearrange(pred_img, 'b n c h w -> (b n) c h w', n=n_rows+2)
                         if pred_img.shape[1] == 4:
                             pred_img = pred_img[:,3:,:,:]
+                        if pred_img.shape[1] == 5:
+                            pred_img = pred_img[:,4:,:,:]
                         utils.save_image(pred_img, str(self.results_folder / f'imgs/outputs/sample-{milestone}.png'), nrow=n_rows+2)
 
                         #self.save(milestone)

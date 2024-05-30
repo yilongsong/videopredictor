@@ -86,14 +86,17 @@ def main(args):
         #train_set.obs, train_set.next_obs = train_set.obs[:-valid_n], train_set.next_obs[:-valid_n]
 
     if args.modality == 'RGB':
-        unet = UnetRGB()
+        unet = UnetRGB(args.semantic)
         channels = 3
     elif args.modality == 'RGBD':
-        unet = UnetRGBD()
+        unet = UnetRGBD(args.semantic)
         channels = 4
     elif args.modality == 'flow':
-        unet = UnetFlow()
+        unet = UnetFlow(args.semantic)
         channels = 2
+
+    if args.semantic and args.modality != 'flow':
+        channels += 1
 
     pretrained_model = "openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
