@@ -850,6 +850,9 @@ class Trainer(object):
 
         self.model, self.opt, self.text_encoder = \
             self.accelerator.prepare(self.model, self.opt, self.text_encoder)
+        
+        self.train_loss = []
+        self.valid_mse = []
 
     @property
     def device(self):
@@ -1023,6 +1026,8 @@ class Trainer(object):
                             pred_img = pred_img[:,4:,:,:]
                         utils.save_image(pred_img, str(self.results_folder / f'imgs/outputs/sample-{milestone}.png'), nrow=n_rows+2)
 
+                        self.valid_mse.append(float(torch.mean((gt_first - all_xs)**2)))
+                        self.train_loss.append(total_loss)
                         #self.save(milestone)
 
                 pbar.update(1)

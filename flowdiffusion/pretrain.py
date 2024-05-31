@@ -4,8 +4,9 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from datasets import Datasethdf5RGB, Datasethdf5RGBD, Datasethdf5Flow
 from torch.utils.data import Subset
 import argparse
-
+import numpy as np
 from matplotlib import pyplot as plt
+import csv
 def visualize_RGB(image1, image2):
     """
     Visualize two (128, 128, 3) RGB images side by side.
@@ -27,10 +28,14 @@ def visualize_RGB(image1, image2):
     plt.show()
 
 def main(args):
-    valid_n = 3
+    valid_n = 3#20
     sample_per_seq = 2
     target_size = (128, 128)
     channels = 3
+    frame_skip = 5
+
+    train_num_steps = 60#60000
+    save_and_sample_every = 10#200
 
     # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
     datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
@@ -40,21 +45,21 @@ def main(args):
             train_set = Datasethdf5RGB(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=5,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         elif args.modality == 'RGBD':
             train_set = Datasethdf5RGBD(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         elif args.modality == 'flow':
             train_set = Datasethdf5Flow(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
@@ -64,21 +69,21 @@ def main(args):
             train_set = Datasethdf5RGB(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=5,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         elif args.modality == 'RGBD':
             train_set = Datasethdf5RGBD(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         elif args.modality == 'flow':
             train_set = Datasethdf5Flow(
                 path=datasets_path,
                 semantic_map=args.semantic,
-                frame_skip=3,
+                frame_skip=frame_skip,
                 random_crop=True
             )
         valid_inds = [i for i in range(0, len(train_set), len(train_set)//valid_n)][:valid_n]
@@ -123,8 +128,8 @@ def main(args):
         train_set=train_set,
         valid_set=valid_set,
         train_lr=1e-4,
-        train_num_steps =60000,
-        save_and_sample_every =100,
+        train_num_steps=train_num_steps,
+        save_and_sample_every=save_and_sample_every,
         ema_update_every = 10,
         ema_decay = 0.999,
         train_batch_size =1,
@@ -142,8 +147,38 @@ def main(args):
 
     if args.mode == 'train':
         trainer.train()
+        x_values = np.linspace(save_and_sample_every, train_num_steps, num=len(trainer.train_loss))
+        file_path = f'../results/plots/loss_mse_{args.modality}_frame_skip_{frame_skip}.csv'
+
+        # Write the lists to a CSV file
+        with open(file_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(trainer.train_loss)
+            writer.writerow(trainer.valid_mse)
+
+        # Plot Train Loss
+        plt.figure(figsize=(12, 6))
+        plt.subplot(2, 1, 1)
+        plt.plot(x_values, trainer.train_loss, marker='o')
+        plt.xlabel("Epochs")
+        plt.ylabel("Train Loss")
+        plt.title(f"Train Loss ({args.modality}, frame_skip = {frame_skip})")
+        plt.grid(True)
+
+        # Plot Validation MSE
+        plt.subplot(2, 1, 2)
+        plt.plot(x_values, trainer.valid_mse, marker='o', color='orange')
+        plt.xlabel("Epochs")
+        plt.ylabel("Valid MSE")
+        plt.title(f"Validation MSE ({args.modality}, frame_skip = {frame_skip})")
+        plt.grid(True)
+
+        plt.savefig(f"../results/plots/loss_mse_{args.modality}_frame_skip_{frame_skip}.png")
+
+        plt.tight_layout()
+        plt.show()
+
     else:
-        import numpy as np
         from torchvision import transforms
         import imageio
         import torch

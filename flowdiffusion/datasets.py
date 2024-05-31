@@ -285,12 +285,3 @@ class Datasethdf5Flow(Dataset):
         x = torch.from_numpy(rearrange(samples[1], 'h w c -> c h w')).float()
         task = self.tasks[idx]
         return x, x_cond, task
-
-
-if __name__ == "__main__":
-    dataset = SequentialNavDataset("../datasets/thor")
-    x, x_cond, task = dataset[2]
-    print(x.shape)
-    print(x_cond.shape)
-    print(task)
-
