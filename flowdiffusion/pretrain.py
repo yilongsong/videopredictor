@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 from matplotlib import pyplot as plt
 import csv
-def visualize_RGB(image1, image2):
+def visualize_RGB(image1, image2): # For debugging
     """
     Visualize two (128, 128, 3) RGB images side by side.
 
@@ -28,17 +28,17 @@ def visualize_RGB(image1, image2):
     plt.show()
 
 def main(args):
-    valid_n = 3#20
+    valid_n = 20
     sample_per_seq = 2
     target_size = (128, 128)
     channels = 3
-    frame_skip = 5
+    frame_skip = 3
 
-    train_num_steps = 60#60000
-    save_and_sample_every = 10#200
+    train_num_steps = 60000
+    save_and_sample_every = 200
 
-    # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
-    datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
+    datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
+    # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
 
     if args.mode == 'inference':
         if args.modality == 'RGB':
@@ -132,8 +132,8 @@ def main(args):
         save_and_sample_every=save_and_sample_every,
         ema_update_every = 10,
         ema_decay = 0.999,
-        train_batch_size =1,
-        valid_batch_size =1,
+        train_batch_size =8,
+        valid_batch_size =4,
         gradient_accumulate_every = 1,
         num_samples=valid_n, 
         results_folder ='../results/pretrain',
@@ -160,7 +160,6 @@ def main(args):
         plt.figure(figsize=(12, 6))
         plt.subplot(2, 1, 1)
         plt.plot(x_values, trainer.train_loss, marker='o')
-        plt.xlabel("Epochs")
         plt.ylabel("Train Loss")
         plt.title(f"Train Loss ({args.modality}, frame_skip = {frame_skip})")
         plt.grid(True)
@@ -176,7 +175,6 @@ def main(args):
         plt.savefig(f"../results/plots/loss_mse_{args.modality}_frame_skip_{frame_skip}.png")
 
         plt.tight_layout()
-        plt.show()
 
     else:
         from torchvision import transforms
