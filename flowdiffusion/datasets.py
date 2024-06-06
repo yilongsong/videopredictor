@@ -21,12 +21,12 @@ import scipy.ndimage
 
 import sys
 
-sys.path.insert(0, '/users/ysong135/Desktop/videopredictor/flowdiffusion/gmflow') # Oscar
-# sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow') # Local
+# sys.path.insert(0, '/users/ysong135/Desktop/videopredictor/flowdiffusion/gmflow') # Oscar
+sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/gmflow') # Local
 import get_flow
 
-sys.path.insert(0, '/users/ysong135/Desktop/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm') # Oscar
-# sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm') # Local
+# sys.path.insert(0, '/users/ysong135/Desktop/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm') # Oscar
+sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/clip_processor_f3rm/f3rm') # Local
 import scripts.get_clip_features
 from features.clip import clip
 

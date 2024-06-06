@@ -37,8 +37,8 @@ def main(args):
     train_num_steps = 60000
     save_and_sample_every = 500
 
-    datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
-    # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
+    # datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
+    datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local
 
     if args.mode == 'inference':
         if args.modality == 'RGB':
