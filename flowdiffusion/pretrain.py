@@ -35,7 +35,7 @@ def main(args):
     frame_skip = 3
 
     train_num_steps = 60000
-    save_and_sample_every = 200
+    save_and_sample_every = 500
 
     datasets_path = "/users/ysong135/scratch/datasets/" # Oscar
     # datasets_path = "/home/yilong/Documents/videopredictor/datasets/" # Local

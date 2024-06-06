@@ -1028,7 +1028,9 @@ class Trainer(object):
 
                         self.valid_mse.append(float(torch.mean((gt_first - all_xs)**2)))
                         self.train_loss.append(total_loss)
-                        #self.save(milestone)
+
+                        if self.step % (self.save_and_sample_every*5) == 0:
+                            self.save(milestone)
 
                 pbar.update(1)
 
