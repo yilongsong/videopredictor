@@ -19,6 +19,9 @@ random.seed(0)
 from matplotlib import pyplot as plt
 import scipy.ndimage
 
+#from raft import RAFT
+from torchvision.models.optical_flow import raft_large
+
 import sys
 
 # sys.path.insert(0, '/users/ysong135/Desktop/videopredictor/flowdiffusion/gmflow') # Oscar
@@ -151,8 +154,6 @@ class Datasethdf5RGBD(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
             print("Preparing RGBD data from hdf5 dataset with semantic channel (RGBD + semantic) ...")
-            clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         else:
             print("Preparing RGBD data from hdf5 dataset ...")
         
@@ -226,14 +227,65 @@ class Datasethdf5RGBD(Dataset):
         task = self.tasks[idx]
         return x, x_cond, task
     
+
+def get_raft_flow(image1, image2):
+    model = RAFT(pretrained=True)
+
+    # Convert images to tensors
+    image1_tensor = torch.from_numpy(np.array(image1)).permute(2, 0, 1).float()
+    image2_tensor = torch.from_numpy(np.array(image2)).permute(2, 0, 1).float()
+
+    # Normalize images
+    image1_tensor = image1_tensor / 255.0
+    image2_tensor = image2_tensor / 255.0
+
+    # Add batch dimension
+    image1_tensor = image1_tensor.unsqueeze(0)
+    image2_tensor = image2_tensor.unsqueeze(0)
+
+    # Compute optical flow
+    flow = model(image1_tensor, image2_tensor)
+
+    # Extract the flow tensor
+    flow_tensor = flow[0].permute(1, 2, 0).detach().cpu().numpy()
+
+    print(flow_tensor.shape)
+
+    return flow_tensor
+
+
+def visualize_flow(rgb_image1, rgb_image2, optical_flow):
+    x = np.arange(0, 128, 1)
+    y = np.arange(0, 128, 1)
+    x, y = np.meshgrid(x, y)
+
+    # Extracting flow components
+    u = optical_flow[:,:,0]
+    v = optical_flow[:,:,1]
+
+    # Plotting the images
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    # Plotting the RGB image
+    axes[0].imshow(rgb_image1)
+    axes[0].set_title('Current obs')
+
+    axes[1].imshow(rgb_image2)
+    axes[1].set_title('Next obs')
+
+    # Plotting the optical flow vectors
+    axes[2].imshow(np.zeros((128, 128)), cmap='gray')  # Displaying a blank image
+    axes[2].quiver(x, y, u, v, color='r', angles='xy', scale_units='xy', scale=1)
+    axes[2].set_title('Optical Flow Visualization')
+
+    plt.show()
+    
 class Datasethdf5Flow(Dataset):
     def __init__(self, path='../datasets/', semantic_map=False, frame_skip=0, random_crop=False):
         if semantic_map:
-            print("Preparing RGBD data from hdf5 dataset with semantic channel (RGBD + semantic) ...")
-            clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-            clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+            print("Preparing flow data from hdf5 dataset with semantic channel (flow + semantic) ...")
         else:
-            print("Preparing RGBD data from hdf5 dataset ...")
+            print("Preparing flow data from hdf5 dataset ...")
         
         self.frame_skip = frame_skip
 
@@ -248,8 +300,8 @@ class Datasethdf5Flow(Dataset):
 
         flow_model = get_flow.get_gmflow_model(resume)
         
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         if semantic_map:
-            device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
             model, preprocess = clip.load(CLIPArgs.model_name, device=device)
 
         for seq_dir in sequence_dirs:
@@ -270,8 +322,16 @@ class Datasethdf5Flow(Dataset):
                             obs = np.concatenate((obs, obs_heatmap), axis=3)
 
                         for i in range(len(obs)):
-                            flow = get_flow.get_gmflow_flow(flow_model, obs[i][:,:,:3], next_obs[i])
-                            
+                            # flow = get_flow.get_gmflow_flow(flow_model, obs[i][:,:,:3], next_obs[i]) # GMFlow doesn't seem to work
+                            # flow = get_raft_flow(obs[i][:,:,:3], next_obs[i])
+
+                            model = raft_large(pretrained=True, progress=False).to(device)
+                            model = model.eval()
+                            flow = model(torch.tensor(obs[i][:,:,:3]).to(device).unsqueeze(0).permute(0, 3, 1, 2).float(), 
+                                         torch.tensor(next_obs[i]).to(device).unsqueeze(0).permute(0, 3, 1, 2).float())[-1]
+                            flow = flow.squeeze(0).permute(1,2,0).cpu().detach().numpy()
+                            visualize_flow(obs[i][:,:,:3], next_obs[i], flow)
+
                             self.obs.append(obs[i])
                             self.next_obs.append(flow)
                             self.tasks.append(task)

@@ -20,12 +20,12 @@
             "args": ["--mode=train", "-o=RGB"]
         },
         {
-            "name": "pretrain flow semantic",
+            "name": "pretrain flow",
             "type": "debugpy",
             "request": "launch",
             "program": "flowdiffusion/pretrain.py",
             "console": "integratedTerminal",
-            "args": ["--mode=train", "-o=flow", "-s"]
+            "args": ["--mode=train", "-o=flow"]
         },
         {
             "name": "pretrain flow",
