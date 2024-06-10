@@ -30,6 +30,9 @@ sys.path.insert(0, '/home/yilong/Documents/videopredictor/flowdiffusion/clip_pro
 import scripts.get_clip_features
 from features.clip import clip
 
+cameras_RGB = ['agentview_image']
+cameras_RGBD = ['agentview_depth']
+
 def visualize_RGB(image1, image2):
     """
     Visualize two (128, 128, 3) RGB images side by side.
@@ -81,31 +84,31 @@ class Datasethdf5RGB(Dataset):
             device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
             model, preprocess = clip.load(CLIPArgs.model_name, device=device)
 
-
         for seq_dir in sequence_dirs:
             print(f'Loading from {seq_dir}')
             task = seq_dir.split("/")[-2].replace('_', ' ')
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
-                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
-                    if semantic_map:
-                        next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
-                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
-                        next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
-                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
-                        for i in range(obs.shape[0]):
-                            next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
-                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                    for camera in cameras_RGB:
+                        next_obs = f['data'][demo]['next_obs'][camera][self.frame_skip:][::self.frame_skip+1]/255.0
+                        obs = f['data'][demo]['obs'][camera][::self.frame_skip+1][:len(next_obs)]/255.0
+                        if semantic_map:
+                            next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
+                            obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                            next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                            obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                            for i in range(obs.shape[0]):
+                                next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                                obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
 
-                        obs = np.concatenate((obs, obs_heatmap), axis=3)
-                        next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
+                            obs = np.concatenate((obs, obs_heatmap), axis=3)
+                            next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
 
-                    for i in range(len(obs)):
-                        self.tasks.append(task)
-                        self.obs.append(obs[i])
-                        self.next_obs.append(next_obs[i])
+                        for i in range(len(obs)):
+                            self.tasks.append(task)
+                            self.obs.append(obs[i])
+                            self.next_obs.append(next_obs[i])
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -173,35 +176,36 @@ class Datasethdf5RGBD(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
-                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
-                    
-                    next_obs_depth = f['data'][demo]['next_obs']['sideview_depth'][self.frame_skip:][::self.frame_skip+1]
-                    obs_depth = f['data'][demo]['obs']['sideview_depth'][::self.frame_skip+1][:len(next_obs)]
-                    #obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max) # Clipping is problematic
-                    obs_depth = (obs_depth - np.min(obs_depth)) / (np.max(obs_depth) - np.min(obs_depth)) # Normalize
-                    #next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
-                    next_obs_depth = (next_obs_depth - np.min(next_obs_depth)) / (np.max(next_obs_depth) - np.min(next_obs_depth)) # Normalize
+                    for camera_RGB, camera_RGBD in zip(cameras_RGB, cameras_RGBD):
+                        next_obs = f['data'][demo]['next_obs'][camera_RGB][self.frame_skip:][::self.frame_skip+1]/255.0
+                        obs = f['data'][demo]['obs'][camera_RGB][::self.frame_skip+1][:len(next_obs)]/255.0
+                        
+                        next_obs_depth = f['data'][demo]['next_obs'][camera_RGBD][self.frame_skip:][::self.frame_skip+1]
+                        obs_depth = f['data'][demo]['obs'][camera_RGBD][::self.frame_skip+1][:len(next_obs)]
+                        obs_depth = np.clip(obs_depth, self.depth_min, self.depth_max) # Clipping is problematic
+                        obs_depth = (obs_depth - np.min(obs_depth)) / (np.max(obs_depth) - np.min(obs_depth)) # Normalize
+                        next_obs_depth = np.clip(next_obs_depth, self.depth_min, self.depth_max)
+                        next_obs_depth = (next_obs_depth - np.min(next_obs_depth)) / (np.max(next_obs_depth) - np.min(next_obs_depth)) # Normalize
 
-                    if semantic_map:
-                        next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
-                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
-                        next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
-                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
-                        for i in range(obs.shape[0]):
-                            next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
-                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                        if semantic_map:
+                            next_obs_semantic = scripts.get_clip_features.get_clip_features(next_obs, task, device, model, preprocess)
+                            obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                            next_obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                            obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                            for i in range(obs.shape[0]):
+                                next_obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(next_obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                                obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
 
-                        obs = np.concatenate((obs, obs_heatmap), axis=3)
-                        next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
+                            obs = np.concatenate((obs, obs_heatmap), axis=3)
+                            next_obs = np.concatenate((next_obs, next_obs_heatmap), axis=3)
 
-                    obs = np.concatenate((obs, obs_depth), axis=3)
-                    next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
-                    
-                    for i in range(len(obs)):
-                        self.obs.append(obs[i])
-                        self.next_obs.append(next_obs[i])
-                        self.tasks.append(task)
+                        obs = np.concatenate((obs, obs_depth), axis=3)
+                        next_obs = np.concatenate((next_obs, next_obs_depth), axis=3)
+                        
+                        for i in range(len(obs)):
+                            self.obs.append(obs[i])
+                            self.next_obs.append(next_obs[i])
+                            self.tasks.append(task)
         
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
@@ -254,22 +258,24 @@ class Datasethdf5Flow(Dataset):
             with h5py.File(seq_dir, 'r') as f:
                 data = f['data']
                 for demo in tqdm(data):
-                    next_obs = f['data'][demo]['next_obs']['sideview_image'][self.frame_skip:][::self.frame_skip+1]/255.0
-                    obs = f['data'][demo]['obs']['sideview_image'][::self.frame_skip+1][:len(next_obs)]/255.0
-                    if semantic_map:
-                        obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
-                        obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
-                        for i in range(obs.shape[0]):
-                            obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
+                    for camera in cameras_RGB:
+                        next_obs = f['data'][demo]['next_obs'][camera][self.frame_skip:][::self.frame_skip+1]/255.0
+                        obs = f['data'][demo]['obs'][camera][::self.frame_skip+1][:len(next_obs)]/255.0
+                        if semantic_map:
+                            obs_semantic = scripts.get_clip_features.get_clip_features(obs, task, device, model, preprocess)
+                            obs_heatmap = np.zeros((obs.shape[0], obs.shape[1], obs.shape[2], 1))
+                            for i in range(obs.shape[0]):
+                                obs_heatmap[i] = np.expand_dims(scipy.ndimage.zoom(obs_semantic[i], zoom=(128/9, 128/9), order=1), axis=-1)
 
-                        obs = np.concatenate((obs, obs_heatmap), axis=3)
+                            obs = np.concatenate((obs, obs_heatmap), axis=3)
 
-                    for i in range(len(obs)):
-                        flow = get_flow.get_gmflow_flow(flow_model, obs[i][:,:,:3], next_obs[i])
-                        self.obs.append(obs[i])
-                        self.next_obs.append(flow)
-                        self.tasks.append(task)
-        
+                        for i in range(len(obs)):
+                            flow = get_flow.get_gmflow_flow(flow_model, obs[i][:,:,:3], next_obs[i])
+                            
+                            self.obs.append(obs[i])
+                            self.next_obs.append(flow)
+                            self.tasks.append(task)
+            
         self.transform = video_transforms.Compose([
                 volume_transforms.ClipToTensor()
         ])

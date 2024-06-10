@@ -12,12 +12,12 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "pretrain RGBD",
+            "name": "pretrain RGB",
             "type": "debugpy",
             "request": "launch",
             "program": "flowdiffusion/pretrain.py",
             "console": "integratedTerminal",
-            "args": ["--mode=train", "-o=RGBD"]
+            "args": ["--mode=train", "-o=RGB"]
         },
         {
             "name": "pretrain flow semantic",
